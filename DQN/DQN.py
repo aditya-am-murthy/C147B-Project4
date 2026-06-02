@@ -173,7 +173,15 @@ class DQN:
         # 6. compute loss between current Q and target Q
         # 7. backprop
         # ====================================
-        raise NotImplementedError("optimize_model func in DQN class not implemented")
+        if len(self.replay_buffer) < 10 * self.batch_size:
+            return False, 0
+        states, actions, rewards, next_states, dones = self.replay_buffer.sample(self.batch_size)
+        q_values = self.model(states)
+        q_values_next = self.model(next_states)
+        q_values_target = rewards + self.gamma * (1 - dones) * q_values_next.max(dim=1)[0]
+        loss = self.loss_fn(q_values, q_values_target)
+        self.optimizer.zero_grad()
+        loss.backward()
 
         # ========== YOUR CODE ENDS ==========
 
@@ -194,7 +202,10 @@ class DQN:
         #  - if probability epsilon: random action
         #  - else: greedy action
         # ====================================
-        raise NotImplementedError("sample_action func in DQN class not implemented")
+        if random.random() < epsilon:
+            return random.randint(0, self.env.action_space.n - 1)
+        else:
+            return q_values.argmax(dim=1)
 
         # ========== YOUR CODE ENDS ==========
         return index
@@ -284,7 +295,8 @@ class HardUpdateDQN(DQN):
         # TODO:
         # fill in the initialization and synchronization of the target model weights
         # ====================================
-        raise NotImplementedError("HardUpdateDQN class not implemented")
+        self.target_model = model(env.observation_space, env.action_space.n, **model_kwargs).to(device)
+        self.target_model.load_state_dict(self.model.state_dict())
 
         # ========== YOUR CODE ENDS ==========
 
@@ -300,7 +312,15 @@ class HardUpdateDQN(DQN):
         # hint: you can copy over most of the code from the parent class
         # and only change two lines
         # ====================================
-        raise NotImplementedError("optimize_model func in HardUpdateDQN class not implemented")
+        if len(self.replay_buffer) < 10 * self.batch_size:
+            return False, 0
+        states, actions, rewards, next_states, dones = self.replay_buffer.sample(self.batch_size)
+        q_values = self.model(states)
+        q_values_next = self.target_model(next_states)
+        q_values_target = rewards + self.gamma * (1 - dones) * q_values_next.max(dim=1)[0]
+        loss = self.loss_fn(q_values, q_values_target)
+        self.optimizer.zero_grad()
+        loss.backward()
 
         # ========== YOUR CODE ENDS ==========
 
@@ -330,6 +350,7 @@ class SoftUpdateDQN(HardUpdateDQN):
         # ========== YOUR CODE HERE ==========
         # TODO
         # ====================================
-        raise NotImplementedError("update_model func in SoftUpdateDQN class not implemented")
+        for target_param, param in zip(self.target_model.parameters(), self.model.parameters()):
+            target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
 
         # ========== YOUR CODE ENDS ==========
