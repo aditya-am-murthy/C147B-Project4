@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 import gymnasium as gym
 import matplotlib.pyplot as plt
-from Project4.DQN.utils import (
+from utils import (
     preprocess,
 )  # this is a helper function that may be useful to grayscale and crop the image
 
@@ -53,7 +53,11 @@ class EnvWrapper(gym.Wrapper):
         # 3. crop and resize the final frame
         # 4. stack the frames to form the initial state
         # ====================================
-        raise NotImplementedError("reset in env_wrapper not implemented")
+        state, info = self.env.reset(**kwargs)
+        for _ in range(self.initial_no_op):
+            state, _, _, _, _ = self.env.step(self.do_nothing_action)
+        state = preprocess(state)
+        self.stacked_state = np.stack([state] * self.stack_frames, axis=0)
 
         # ========== YOUR CODE ENDS ==========
 
@@ -81,7 +85,11 @@ class EnvWrapper(gym.Wrapper):
         # 3. preprocess the final observed frame.
         # 4. append new frame to `self.stacked_state` and remove oldest.
         # ====================================
-        raise NotImplementedError("step in env_wrapper not implemented")
+        for _ in range(self.skip_frames):
+            state, reward, terminated, truncated, info = self.env.step(action)
+        state = preprocess(state)
+        self.stacked_state = np.append(self.stacked_state[1:], state, axis=0)
+        reward = reward * self.skip_frames
 
         # ========== YOUR CODE ENDS ==========
         return self.stacked_state, reward, terminated, truncated, info
