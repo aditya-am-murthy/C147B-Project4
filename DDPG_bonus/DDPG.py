@@ -3,14 +3,14 @@ import torch.optim as optim
 import torch.nn.functional as F
 import torch.nn
 import gymnasium as gym
-from Project4.DDPG_bonus.replay_buffer import ReplayBufferDDPG
+from replay_buffer import ReplayBufferDDPG
 import wandb
 import random
 import numpy as np
 import os
 import time
-import Project4.DDPG_bonus.model as model
-from Project4.DDPG_bonus.utils import *
+import model as model
+from utils import *
 import tqdm
 
 
@@ -54,14 +54,19 @@ class OU_Noise:
         # TODO:
         # hint look at line 36
         # ====================================
-        raise NotImplementedError
+        self.state = np.ones(self.action_space) * self.mu
+        self.sigma = sigma
+        self.theta = 0.15
+        self.dt = 1e-2
+        self.seed = 42
 
         # ========== YOUR CODE ENDS ==========
 
     def _sample(self):
         """sample the noise per the discretized Ornstein-Uhlenbeck process detailed in the notebook"""
         # ========== YOUR CODE HERE ==========
-        raise NotImplementedError
+        self.state = self.state + self.theta * (self.mu - self.state) * self.dt + self.sigma * np.sqrt(self.dt) * np.random.normal(0, 1, self.action_space)
+        return self.state
 
         # ========== YOUR CODE ENDS ==========
 
@@ -78,7 +83,8 @@ class OU_Noise:
         # TODO:
         # you can use the _sample method to get the noise
         # ====================================
-        raise NotImplementedError
+        action = action + self._sample()
+        return np.clip(action, self.action_range[0], self.action_range[1])
 
         # ========== YOUR CODE ENDS ==========
 
@@ -242,13 +248,45 @@ class DDPG:
         # update the model
         # return the losses
         # ====================================
-        raise NotImplementedError
+        states, actions, rewards, next_states, dones = self.replay_buffer.sample(batch_size)
+        
+        states = torch.tensor(states, dtype=torch.float32).to(self.device)
+        actions = torch.tensor(actions, dtype=torch.float32).to(self.device)
+        rewards = torch.tensor(rewards, dtype=torch.float32).to(self.device).unsqueeze(1)
+        next_states = torch.tensor(next_states, dtype=torch.float32).to(self.device)
+        dones = torch.tensor(dones, dtype=torch.float32).to(self.device).unsqueeze(1)
+
+        with torch.no_grad():
+            next_actions = self.target_actor(next_states)
+            target_q = self.target_critic(next_states, next_actions)
+            y_target = rewards + (1 - dones) * self.gamma * target_q
+
+        current_q = self.critic(states, actions)
+        critic_loss = self.loss_fn(current_q, y_target)
+
+        self.critic_optimizer.zero_grad()
+        critic_loss.backward()
+        self.critic_optimizer.step()
+
+        actor_loss = -self.critic(states, self.actor(states)).mean()
+        
+        self.actor_optimizer.zero_grad()
+        actor_loss.backward()
+        self.actor_optimizer.step()
+
+        self._update_model()
+
+        return critic_loss.item(), actor_loss.item()
 
         # ========== YOUR CODE ENDS ==========
 
     def _update_model(self):
         # ========== YOUR CODE HERE ==========
-        raise NotImplementedError
+        for param, target_param in zip(self.actor.parameters(), self.target_actor.parameters()):
+            target_param.data.copy_(self.tau * param.data + (1.0 - self.tau) * target_param.data)
+            
+        for param, target_param in zip(self.critic.parameters(), self.target_critic.parameters()):
+            target_param.data.copy_(self.tau * param.data + (1.0 - self.tau) * target_param.data)
 
         # ========== YOUR CODE ENDS ==========
 
@@ -289,7 +327,27 @@ class DDPG:
                 # if the replay buffer is large enough, and it is time to train the model
                 # and update the total Q and actor loss
                 # ====================================
-                raise NotImplementedError
+                
+                with torch.no_grad():
+                    state_tensor = torch.tensor(state, dtype=torch.float32).to(self.device).unsqueeze(0)
+                    action = self.actor(state_tensor).cpu().numpy()[0]
+                
+                action = self.OU_noise.noise(action)
+                
+                next_state, reward, terminated, truncated, _ = self.env.step(action)
+                total_reward += reward
+                done = terminated or truncated
+                
+                self.replay_buffer.add(state, action, reward, next_state, done)
+                
+                state = next_state
+                
+                if len(self.replay_buffer) >= self.batch_size and l % train_every == 0:
+                    Q_loss, actor_loss = self._train_one_batch(self.batch_size)
+                    Q_loss_total += Q_loss
+                    actor_loss_total += actor_loss
+                    
+                l += 1
 
                 # ========== YOUR CODE ENDS ==========
 

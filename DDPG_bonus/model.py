@@ -30,7 +30,11 @@ class Actor(nn.Module):
         # TODO:
         # define the fully connected layers for the actor
         # ====================================
-        raise NotImplementedError
+        input_dim = int(np.prod(input_size))
+        self.fc1 = nn.Linear(input_dim, 400)
+        self.fc2 = nn.Linear(400, 300)
+        self.fc3 = nn.Linear(300, action_size)
+        self.init_weights()
     
         # ========== YOUR CODE ENDS ==========
         
@@ -43,13 +47,18 @@ class Actor(nn.Module):
         # TODO:
         # initialize the weights of the model
         # ====================================
-        raise NotImplementedError
+        self.fc1.weight.data = fanin_init(self.fc1.weight.data.size())
+        self.fc2.weight.data = fanin_init(self.fc2.weight.data.size())
+        self.fc3.weight.data.uniform_(-init_w, init_w)
     
         # ========== YOUR CODE ENDS ==========
     
     def forward(self, x:torch.Tensor)->torch.Tensor:
         # ========== YOUR CODE HERE ==========
-        raise NotImplementedError
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        x = torch.tanh(self.fc3(x))
+        return x
 
         # ========== YOUR CODE ENDS ==========
     
@@ -73,7 +82,11 @@ class Critic(nn.Module):
         # TODO: 
         # define the fully connected layers for the critic and initialize the weights
         # ====================================
-        raise NotImplementedError
+        input_dim = int(np.prod(input_size))
+        self.fc1 = nn.Linear(input_dim, 400)
+        self.fc2 = nn.Linear(400 + action_size, 300)
+        self.fc3 = nn.Linear(300, 1)
+        self.init_weights()
     
         # ========== YOUR CODE ENDS ==========
         
@@ -82,12 +95,16 @@ class Critic(nn.Module):
         # TODO:
         # initialize the weights of the model
         # ====================================
-        raise NotImplementedError
-    
+        self.fc1.weight.data = fanin_init(self.fc1.weight.data.size())
+        self.fc2.weight.data = fanin_init(self.fc2.weight.data.size())
+        self.fc3.weight.data.uniform_(-init_w, init_w)
         # ========== YOUR CODE ENDS ==========
         
     def forward(self, x:torch.Tensor, a:torch.Tensor)->torch.Tensor:
         # ========== YOUR CODE HERE ==========
-        raise NotImplementedError
+        x = F.relu(self.fc1(x))
+        x = torch.cat([x, a], dim=1)
+        x = F.relu(self.fc2(x))
+        return self.fc3(x)
     
         # ========== YOUR CODE ENDS ==========
